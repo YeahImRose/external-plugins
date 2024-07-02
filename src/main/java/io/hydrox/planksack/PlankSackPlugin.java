@@ -78,6 +78,7 @@ public class PlankSackPlugin extends Plugin
 {
 	private static final List<Integer> PLANKS = Arrays.asList(ItemID.PLANK, ItemID.OAK_PLANK, ItemID.TEAK_PLANK, ItemID.MAHOGANY_PLANK);
 	private static final List<String> PLANK_NAMES = Arrays.asList("Plank", "Oak plank", "Teak plank", "Mahogany plank");
+	private static final List<Integer> PLANK_MAKE_LOGS = Arrays.asList(ItemID.LOGS, ItemID.OAK_LOGS, ItemID.TEAK_LOGS, ItemID.MAHOGANY_LOGS);
 	private static final Set<Integer> MAHOGANY_HOMES_REPAIRS = Sets.newHashSet(
 		39982, // Bob clock
 		39995, // Jeff mirror
@@ -147,8 +148,10 @@ public class PlankSackPlugin extends Plugin
 
 	private PlankSackCounter plankSackCounter;
 
-	private Multiset<Integer> inventorySnapshot;
-	private boolean checkForUpdate = false;
+	private Multiset<Integer> inventoryPlanksSnapshot;
+	private Multiset<Integer> inventoryLogsSnapshot;
+	private boolean checkForPlankUpdate = false;
+	private boolean checkForLogUpdate = false;
 
 	private int menuItemsToCheck = 0;
 	private final List<BuildMenuItem> buildMenuItems = new ArrayList<>();
@@ -189,12 +192,22 @@ public class PlankSackPlugin extends Plugin
 			return;
 		}
 
-		if (checkForUpdate)
+		if (checkForPlankUpdate)
 		{
-			checkForUpdate = false;
+			checkForPlankUpdate = false;
 			Multiset<Integer> currentInventory = createSnapshot(event.getItemContainer());
-			Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, inventorySnapshot);
-			Multiset<Integer> deltaPlus = Multisets.difference(inventorySnapshot, currentInventory);
+			Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, inventoryPlanksSnapshot);
+			Multiset<Integer> deltaPlus = Multisets.difference(inventoryPlanksSnapshot, currentInventory);
+			deltaPlus.forEachEntry((id, c) -> plankCount += c);
+			deltaMinus.forEachEntry((id, c) -> plankCount -= c);
+			setPlankCount(plankCount);
+		}
+		if (checkForLogUpdate)
+		{
+			checkForLogUpdate = false;
+			Multiset<Integer> currentInventory = createSnapshot(event.getItemContainer());
+			Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, inventoryLogsSnapshot);
+			Multiset<Integer> deltaPlus = Multisets.difference(inventoryLogsSnapshot, currentInventory);
 			deltaPlus.forEachEntry((id, c) -> plankCount += c);
 			deltaMinus.forEachEntry((id, c) -> plankCount -= c);
 			setPlankCount(plankCount);
@@ -222,8 +235,8 @@ public class PlankSackPlugin extends Plugin
 			if (event.getWidget().getItemId() == ItemID.PLANK_SACK &&
 				(event.getMenuOption().equals("Fill") || event.getMenuOption().equals("Empty") || event.getMenuOption().equals("Use")))
 			{
-				inventorySnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
-				checkForUpdate = true;
+				inventoryPlanksSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+				checkForPlankUpdate = true;
 			}
 			// Use plank on sack or sack on plank
 			else if (event.getMenuOption().equals("Use")
@@ -236,19 +249,30 @@ public class PlankSackPlugin extends Plugin
 				if ((firstSelectedItemID == ItemID.PLANK_SACK && PLANKS.contains(secondSelectedItemID))
 					|| (PLANKS.contains(firstSelectedItemID) && secondSelectedItemID == ItemID.PLANK_SACK))
 				{
-					inventorySnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
-					checkForUpdate = true;
+					inventoryPlanksSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+					checkForPlankUpdate = true;
 				}
+			}
+			else if (event.getMenuOption().equals("Make"))
+			{
+				inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
+				checkForLogUpdate = true;
 			}
 		}
 		else if (event.getMenuOption().equals("Repair") && MAHOGANY_HOMES_REPAIRS.contains(event.getId()))
 		{
 			watchForAnimations = true;
-			inventorySnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+			inventoryPlanksSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
 		}
 		else if (event.getMenuOption().equals("Fix") && HALLOWED_SEPULCHRE_FIXES.contains(event.getId()))
 		{
-			inventorySnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+			inventoryPlanksSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+		}
+		// TODO: need someone to test if this is called properly when casting (I lack the magic level to test)
+		else if (event.getMenuOption().equals("Cast Make Plank"))
+		{
+			inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
+			checkForLogUpdate = true;
 		}
 	}
 
@@ -365,7 +389,7 @@ public class PlankSackPlugin extends Plugin
 			&& anim != lastAnimation)
 		{
 			Multiset<Integer> current = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
-			Multiset<Integer> delta = Multisets.difference(inventorySnapshot, current);
+			Multiset<Integer> delta = Multisets.difference(inventoryPlanksSnapshot, current);
 			if (delta.size() == 0)
 			{
 				setPlankCount(plankCount - 1);
@@ -389,7 +413,7 @@ public class PlankSackPlugin extends Plugin
 			// Therefore, we need to delay this check by a bit to make sure it picks up inventory planks being used.
 			clientThread.invokeLater(() -> {
 				Multiset<Integer> current = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
-				Multiset<Integer> delta = Multisets.difference(inventorySnapshot, current);
+				Multiset<Integer> delta = Multisets.difference(inventoryPlanksSnapshot, current);
 				switch (delta.size())
 				{
 					case 0:
@@ -415,17 +439,17 @@ public class PlankSackPlugin extends Plugin
 		}
 		else if (message.equals("You haven't got any planks that can go in the sack."))
 		{
-			checkForUpdate = false;
+			checkForPlankUpdate = false;
 		}
 		else if (message.equals("Your sack is full."))
 		{
 			setPlankCount(28);
-			checkForUpdate = false;
+			checkForPlankUpdate = false;
 		}
 		else if (message.equals("Your sack is empty."))
 		{
 			setPlankCount(0);
-			checkForUpdate = false;
+			checkForPlankUpdate = false;
 		}
 	}
 
@@ -437,14 +461,29 @@ public class PlankSackPlugin extends Plugin
 
 	private Multiset<Integer> createSnapshot(ItemContainer container)
 	{
+		// Defaulting snapshotPlanks to false for all legacy calls and as pseudo-default argument
+		return createSnapshot(container, false);
+	}
+
+	private Multiset<Integer> createSnapshot(ItemContainer container, boolean snapshotPlanks)
+	{
 		if (container == null)
 		{
 			return null;
 		}
 		Multiset<Integer> snapshot = HashMultiset.create();
-		Arrays.stream(container.getItems())
-			.filter(item -> PLANKS.contains(item.getId()))
-			.forEach(i -> snapshot.add(i.getId(), i.getQuantity()));
+		if (snapshotPlanks)
+		{
+			Arrays.stream(container.getItems())
+					.filter(item -> PLANK_MAKE_LOGS.contains(item.getId()))
+					.forEach(i -> snapshot.add(i.getId(), i.getQuantity()));
+		}
+		else
+		{
+			Arrays.stream(container.getItems())
+					.filter(item -> PLANKS.contains(item.getId()))
+					.forEach(i -> snapshot.add(i.getId(), i.getQuantity()));
+		}
 		return snapshot;
 	}
 
