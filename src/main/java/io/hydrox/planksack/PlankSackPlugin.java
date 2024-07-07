@@ -105,6 +105,7 @@ public class PlankSackPlugin extends Plugin
 	private static final int SCRIPT_CONSTRUCTION_OPTION_CLICKED = 1405;
 	private static final int SCRIPT_CONSTRUCTION_OPTION_KEYBIND = 1632;
 	private static final int SCRIPT_BUILD_CONSTRUCTION_MENU_ENTRY = 1404;
+	private static final int SCRIPT_SAWMILL_CHECK_SELECTION = 2053;
 
 	@Data
 	private static class BuildMenuItem
@@ -184,6 +185,14 @@ public class PlankSackPlugin extends Plugin
 		}
 	}
 
+	private void updatePlanks(Multiset<Integer> currentInventory, Multiset<Integer> snapshot)
+	{
+		Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, snapshot);
+		Multiset<Integer> deltaPlus = Multisets.difference(snapshot, currentInventory);
+		deltaPlus.forEachEntry((id, c) -> plankCount += c);
+		deltaMinus.forEachEntry((id, c) -> plankCount -= c);
+		setPlankCount(plankCount);
+	}
 	@Subscribe
 	public void onItemContainerChanged(ItemContainerChanged event)
 	{
@@ -194,23 +203,10 @@ public class PlankSackPlugin extends Plugin
 
 		if (checkForPlankUpdate)
 		{
+			Multiset<Integer> currentInventory = createSnapshot(event.getItemContainer());
+			updatePlanks(currentInventory, inventoryPlanksSnapshot);
 			checkForPlankUpdate = false;
-			Multiset<Integer> currentInventory = createSnapshot(event.getItemContainer());
-			Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, inventoryPlanksSnapshot);
-			Multiset<Integer> deltaPlus = Multisets.difference(inventoryPlanksSnapshot, currentInventory);
-			deltaPlus.forEachEntry((id, c) -> plankCount += c);
-			deltaMinus.forEachEntry((id, c) -> plankCount -= c);
-			setPlankCount(plankCount);
-		}
-		if (checkForLogUpdate)
-		{
-			checkForLogUpdate = false;
-			Multiset<Integer> currentInventory = createSnapshot(event.getItemContainer());
-			Multiset<Integer> deltaMinus = Multisets.difference(currentInventory, inventoryLogsSnapshot);
-			Multiset<Integer> deltaPlus = Multisets.difference(inventoryLogsSnapshot, currentInventory);
-			deltaPlus.forEachEntry((id, c) -> plankCount += c);
-			deltaMinus.forEachEntry((id, c) -> plankCount -= c);
-			setPlankCount(plankCount);
+
 		}
 
 		updateInfobox(event.getItemContainer());
@@ -256,7 +252,6 @@ public class PlankSackPlugin extends Plugin
 			else if (event.getMenuOption().equals("Make"))
 			{
 				inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
-				checkForLogUpdate = true;
 			}
 		}
 		else if (event.getMenuOption().equals("Repair") && MAHOGANY_HOMES_REPAIRS.contains(event.getId()))
@@ -267,6 +262,10 @@ public class PlankSackPlugin extends Plugin
 		else if (event.getMenuOption().equals("Fix") && HALLOWED_SEPULCHRE_FIXES.contains(event.getId()))
 		{
 			inventoryPlanksSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY));
+		}
+		else if (event.getMenuOption().equals("Buy-plank"))
+		{
+			inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
 		}
 		// TODO: need someone to test if this is called properly when casting (I lack the magic level to test)
 		else if (event.getMenuOption().equals("Cast Make Plank"))
@@ -279,6 +278,13 @@ public class PlankSackPlugin extends Plugin
 	@Subscribe
 	public void onScriptPreFired(ScriptPreFired event)
 	{
+		// Sawmill checking an inventory slot for logs
+		if (event.getScriptId() == SCRIPT_SAWMILL_CHECK_SELECTION
+			&& !checkForLogUpdate)
+		{
+			checkForLogUpdate = true;
+			return;
+		}
 		// Construction menu option selected
 		// Construction menu option selected with keybind
 		if (event.getScriptId() != SCRIPT_CONSTRUCTION_OPTION_CLICKED
@@ -333,6 +339,12 @@ public class PlankSackPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
+		if (checkForLogUpdate) {
+			Multiset<Integer> currentInventory = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
+			updatePlanks(currentInventory, inventoryLogsSnapshot);
+			checkForLogUpdate = false;
+		}
+
 		if (menuItemsToCheck <= 0)
 		{
 			return;
@@ -461,18 +473,18 @@ public class PlankSackPlugin extends Plugin
 
 	private Multiset<Integer> createSnapshot(ItemContainer container)
 	{
-		// Defaulting snapshotPlanks to false for all legacy calls and as pseudo-default argument
+		// Defaulting snapshotLogs to false for all legacy calls and as pseudo-default argument
 		return createSnapshot(container, false);
 	}
 
-	private Multiset<Integer> createSnapshot(ItemContainer container, boolean snapshotPlanks)
+	private Multiset<Integer> createSnapshot(ItemContainer container, boolean snapshotLogs)
 	{
 		if (container == null)
 		{
 			return null;
 		}
 		Multiset<Integer> snapshot = HashMultiset.create();
-		if (snapshotPlanks)
+		if (snapshotLogs)
 		{
 			Arrays.stream(container.getItems())
 					.filter(item -> PLANK_MAKE_LOGS.contains(item.getId()))
