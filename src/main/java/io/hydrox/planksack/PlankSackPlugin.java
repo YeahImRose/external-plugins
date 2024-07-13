@@ -253,6 +253,12 @@ public class PlankSackPlugin extends Plugin
 			{
 				inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
 			}
+			else if (event.getMenuOption().equals("Cast")
+				&& event.getMenuTarget().contains("Plank Make"))
+			{
+				inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
+				checkForLogUpdate = true;
+			}
 		}
 		else if (event.getMenuOption().equals("Repair") && MAHOGANY_HOMES_REPAIRS.contains(event.getId()))
 		{
@@ -266,12 +272,6 @@ public class PlankSackPlugin extends Plugin
 		else if (event.getMenuOption().equals("Buy-plank"))
 		{
 			inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
-		}
-		// TODO: need someone to test if this is called properly when casting (I lack the magic level to test)
-		else if (event.getMenuOption().equals("Cast Make Plank"))
-		{
-			inventoryLogsSnapshot = createSnapshot(client.getItemContainer(InventoryID.INVENTORY), true);
-			checkForLogUpdate = true;
 		}
 	}
 
